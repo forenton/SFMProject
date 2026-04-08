@@ -1,6 +1,10 @@
 from src.database.connection import session_maker, repeatable_read_session_maker
 from src.database.models import Orders, Products, Users, OrderItems
 from sqlalchemy.orm import selectinload
+from src.services.log_service import LogService
+import traceback
+
+logging = LogService()
 
 def get_user_orders(user_id):
     with session_maker() as session:
@@ -48,6 +52,9 @@ def read_user(user_id):
                 raise ValueError("Пользователь не найден")
             return user
         except ValueError as e:
+            stack_trace = traceback.format_exc()
+            log_data = {"type": "error", "stack_trace": stack_trace, "status_code": 404}
+            logging.save_log(log_data)
             return e
 
 
