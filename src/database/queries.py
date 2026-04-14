@@ -5,6 +5,7 @@ from time import time
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ, ISOLATION_LEVEL_SERIALIZABLE, ISOLATION_LEVEL_READ_COMMITTED
 from src.database.connection import get_connection
+from src.services.timer_service import Timer
 
 def create_order(user_id, product_id, quantity, total):
     """Создание заказа с атомарными операциями"""
@@ -183,18 +184,6 @@ def create_order_with_acid(user_id, product_id, quantity, total):
             conn.rollback()
             print(f"Ошибка: {e}")
             raise
-
-class Timer:
-    def __init__(self):
-        self.result = None
-
-    def __enter__(self):
-        self.start_time = time()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        end_time = time()
-        self.result = end_time - self.start_time
 
 @dataclass
 class IndexData:
