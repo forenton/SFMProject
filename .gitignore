@@ -1,0 +1,7 @@
+.idea/
+*.log
+.env
+.venv/
+.venv/include
+.venv/Lib
+.venv/Scripts
