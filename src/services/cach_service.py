@@ -5,7 +5,8 @@ from secrets import token_hex
 from src.database.connection import session_maker
 from src.database.models import Products
 from src.database.queries import Timer
-
+import redis.asyncio as aioredis
+import functools
 
 redis_client = redis.Redis(
     host='localhost',
@@ -13,6 +14,14 @@ redis_client = redis.Redis(
     db=0,
     decode_responses=True
 )
+
+async_redis_client = aioredis.Redis(
+    host='localhost',
+    port=6379,
+    db=0,
+    decode_responses=True
+)
+
 class CacheService:
     def __init__(self, host = "localhost", port = 6379, db = 0):
         self.redis_client = redis.Redis(
@@ -74,6 +83,29 @@ class CacheService:
     def delete_user_session(self, session_token):
         session_key = f"session:{session_token}"
         self.redis_client.delete(session_key)
+
+def cache_async(ttl: int = 300, prefix: str = "cache"):
+    """Декоратор для кэширования async-функций в Redis"""
+
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            key = [prefix, func.__name__]
+            if args:
+                key.append(str(args))
+            if kwargs:
+                key.append(str(sorted(kwargs.items())))
+            cache_key = ":".join(key)
+
+            cached = await async_redis_client.get(cache_key)
+            if cached:
+                return json.loads(cached)
+
+            result = await func(*args, **kwargs)
+            await async_redis_client.setex(cache_key, ttl, json.dumps(result))
+            return result
+        return wrapper
+    return decorator
 
 if __name__ == '__main__':
     timer = Timer()
