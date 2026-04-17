@@ -5,3 +5,4 @@
 .venv/include
 .venv/Lib
 .venv/Scripts
+test.py

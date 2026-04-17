@@ -5,7 +5,12 @@ import httpx
 from contextlib import asynccontextmanager
 from src.database.connection import DB_CONFIG
 from src.services.cach_service import async_redis_client
+from src.database.async_repository import process_orders_async as process_orders
+from pydantic import BaseModel
+from typing import List
 
+class OrderProcessModel(BaseModel):
+    order_list: List[int]
 
 db_pool: asyncpg.Pool | None = None
 http_client: httpx.AsyncClient | None = None
@@ -76,3 +81,16 @@ async def get_product_full(product_id: int, conn=Depends(get_db)):
     if not product:
         return {"error": "Товар не найден"}
     return {"product": product, "reviews": reviews, "views": views}
+
+@app.post("/orders/process")
+async def process_orders_endpoint(orders_list: OrderProcessModel):
+    try:
+        orders_list = orders_list.order_list
+        results = await process_orders(orders_list)
+        return {"status": "success",
+            "processed": len(results),
+            "results": results}
+    except Exception as e:
+        return {"status": "error",
+            "error": str(e)}
+

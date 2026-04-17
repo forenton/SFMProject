@@ -18,10 +18,12 @@ class BaseORM(DeclarativeBase):
 
 class Orders(BaseORM):
     __tablename__ = "orders"
+    _repr_cols = ("status")
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"),  nullable=False)
     total: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, server_default="Pending")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"),  nullable=False)
 
     users: Mapped["Users"] = relationship(back_populates="orders")
