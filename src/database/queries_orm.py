@@ -60,14 +60,13 @@ def read_user(user_id):
 
 def get_product_from_db(product_id):
     with session_maker() as session:
-        try:
-            product = session.query(Products).filter(Products.id == product_id).first()
-            if product:
-                return product
-            else:
-                raise ValueError("Товар не найден")
-        except ValueError as e:
-            return e
+
+        product = session.query(Products).filter(Products.id == product_id).first()
+        if product:
+            return product
+        else:
+            raise ValueError("Товар не найден")
+
 
 def get_all_products_from_db():
     with session_maker() as session:
@@ -79,7 +78,7 @@ def get_all_products_from_db():
 
 if __name__ == "__main__":
     # create_order(25, 1002, 2, 4000)
-    print(get_all_products_from_db())
+    print(get_product_from_db(1))
     # user = get_user_orders(30)
     # for order in user:
     #     print(order)
