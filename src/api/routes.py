@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, APIRouter, HTTPException, status
 import asyncio
 import asyncpg
 import httpx
@@ -8,24 +8,40 @@ from src.services.cach_service import async_redis_client
 from src.database.async_repository import process_orders_async as process_orders
 from pydantic import BaseModel
 from typing import List
+from src.database.async_repository import ProductRepository
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from src.services.cach_service import CacheService
+
+cash_service = CacheService()
 
 class OrderProcessModel(BaseModel):
     order_list: List[int]
 
+class ProductModel(BaseModel):
+    name: str
+    price: float
+    quantity: int
+
+class PaginationModel(BaseModel):
+    skip: int = 0
+    limit: int = 10
+
 db_pool: asyncpg.Pool | None = None
 http_client: httpx.AsyncClient | None = None
+product_repository: ProductRepository = ProductRepository(db_pool)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Управление жизненным циклом приложения"""
-    global db_pool, http_client
+    global db_pool, http_client, product_repository
     # Создание пула при старте
     db_pool = await asyncpg.create_pool(
         **DB_CONFIG,
         min_size=5,
         max_size=20
     )
-
+    product_repository = ProductRepository(db_pool)
     http_client = httpx.AsyncClient(timeout=5.0)
     yield
 
@@ -35,6 +51,7 @@ async def lifespan(app: FastAPI):
     print("Connection pool закрыт")
 
 app = FastAPI(lifespan=lifespan)
+v1_router = APIRouter(prefix="/v1", tags=["v1"])
 
 async def get_db():
     """Dependency для получения соединения из пула"""
@@ -94,3 +111,29 @@ async def process_orders_endpoint(orders_list: OrderProcessModel):
         return {"status": "error",
             "error": str(e)}
 
+@app.get("/products")
+def get_all_products(skip: int = 0, limit: int = 10):
+    try:
+        products = cash_service.get_cached_products()
+        if not products:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,)
+        products.sort(key=lambda x: x["id"])
+        result_products = products
+        return result_products
+    except Exception as e:
+        raise
+
+
+@v1_router.post("/products")
+async def create_product(product: ProductModel):
+    id = await product_repository.create(product.name, product.price, product.quantity)
+    return {"status": "success", "id": id}
+
+app.include_router(v1_router)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # или конкретные домены
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
