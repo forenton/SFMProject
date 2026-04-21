@@ -95,6 +95,16 @@ def process_orders_sync(order_ids: list):
 
     return result
 
+async def create_user_in_db(conn, name: str, password: str, email: str, balance: float = 0):
+    return await conn.execute(
+        "INSERT INTO users (name, password, email, balance) VALUES ($1, $2, $3, $4)",
+        name, password, email, balance
+    )
+
+async def read_user_in_db(conn, name: str):
+    result = await conn.fetchrow("SELECT * FROM users WHERE name = $1", name)
+    return dict(result)
+
 # Измерение производительности
 async def main():
     order_ids = list(range(101, 103))  # 100 заказов

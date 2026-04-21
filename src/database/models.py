@@ -36,6 +36,7 @@ class Users(BaseORM):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(100), nullable=False)
     balance: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    password: Mapped[str] = mapped_column(String(30), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
     orders: Mapped[List["Orders"]] = relationship(back_populates="users")

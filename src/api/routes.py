@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, APIRouter, HTTPException, status
+from fastapi import FastAPI, Depends, APIRouter, HTTPException, status, Request
 import asyncio
 import asyncpg
 import httpx
@@ -6,22 +6,26 @@ from contextlib import asynccontextmanager
 from src.database.connection import DB_CONFIG
 from src.services.cach_service import async_redis_client
 from src.database.async_repository import process_orders_async as process_orders
-from pydantic import BaseModel
 from typing import List
-from src.database.async_repository import ProductRepository
+from src.database.async_repository import ProductRepository, create_user_in_db, read_user_in_db
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from src.services.cach_service import CacheService
+import logging
+from src.services.timer_service import Timer
+from src.api.schemas import *
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-cash_service = CacheService()
+limiter = Limiter(key_func=get_remote_address)
 
 class OrderProcessModel(BaseModel):
     order_list: List[int]
 
-class ProductModel(BaseModel):
-    name: str
-    price: float
-    quantity: int
+class ProductCreateModel(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, description="Название товара")
+    price: float = Field(..., gt=0, description="Цена товара (должна быть больше 0)")
+    quantity: int = Field(..., ge=0, description="Количество на складе (не может быть отрицательным)")
 
 class PaginationModel(BaseModel):
     skip: int = 0
@@ -30,6 +34,7 @@ class PaginationModel(BaseModel):
 db_pool: asyncpg.Pool | None = None
 http_client: httpx.AsyncClient | None = None
 product_repository: ProductRepository = ProductRepository(db_pool)
+cash_service = CacheService()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,7 +56,25 @@ async def lifespan(app: FastAPI):
     print("Connection pool закрыт")
 
 app = FastAPI(lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
 v1_router = APIRouter(prefix="/v1", tags=["v1"])
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    global logger
+    logger.info(f"Запрос: {request.method} {request.url.path}")
+    with Timer() as timer:
+        response = await call_next(request)
+    logger.info(f"Ответ: {response.status_code}, время: {timer.result:.3f} сек")
+    response.headers["X-Process-Time"] = str(timer.result)
+    return response
 
 async def get_db():
     """Dependency для получения соединения из пула"""
@@ -125,9 +148,29 @@ def get_all_products(skip: int = 0, limit: int = 10):
 
 
 @v1_router.post("/products")
-async def create_product(product: ProductModel):
+async def create_product(product: ProductCreateModel):
     id = await product_repository.create(product.name, product.price, product.quantity)
     return {"status": "success", "id": id}
+
+@v1_router.post("/register")
+async def create_user(user: UserCreate, conn=Depends(get_db)):
+    hashed_password = hash_password(user.password)
+    result = await create_user_in_db(conn, name=user.name, password=hashed_password, email=user.email)
+    return {"status": "success", "result": result}
+
+@v1_router.get("/login")
+@limiter.limit("5/minute")
+async def login_user(request: Request, usermane: str, password: str, conn=Depends(get_db)):
+    result = await read_user_in_db(conn, name=usermane)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    authorisation = verify_password(password, result["password"])
+    if authorisation:
+        output = {"name": result["name"], "email": result["email"], "balance": result["balance"]}
+        return {"status": "success", "result": output}
+    else:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,)
 
 app.include_router(v1_router)
 app.add_middleware(
