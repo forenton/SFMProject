@@ -1,3 +1,5 @@
+from typing import Optional
+
 import psycopg2
 from os import getenv
 from dotenv import load_dotenv
@@ -5,6 +7,8 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from fastapi import HTTPException
+import asyncpg
 
 load_dotenv()
 
@@ -63,6 +67,42 @@ def test_connection():
             version = cursor.fetchone()
             print(f"Подключение успешно! Версия PostgreSQL: {version[0]}")
 
+db_pool: Optional[asyncpg.Pool] = None
+
+async def init_db_pool():
+    """Инициализация пула при старте"""
+    global db_pool
+    if db_pool is None:
+        db_pool = await asyncpg.create_pool(
+            **DB_CONFIG,
+            min_size=5,
+            max_size=20
+        )
+    return db_pool
+
+
+async def close_db_pool():
+    """Закрытие пула при остановке"""
+    global db_pool
+    if db_pool:
+        await db_pool.close()
+        db_pool = None
+
+
+async def get_db():
+    """Зависимость для получения соединения из пула"""
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not initialized")
+
+    async with db_pool.acquire() as conn:
+        yield conn
+
+
+async def get_pool():
+    """Зависимость для получения самого пула"""
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not initialized")
+    return db_pool
 
 
 if __name__ == "__main__":

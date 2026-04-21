@@ -77,7 +77,7 @@ def get_all_products_from_db():
             return e
 
 if __name__ == "__main__":
-    # create_order(25, 1002, 2, 4000)
+    create_order(8, 1002, 2, 4000)
     print(get_product_from_db(1))
     # user = get_user_orders(30)
     # for order in user:

@@ -7,6 +7,10 @@ from src.services.timer_service import Timer
 from src.database.connection import async_session_maker
 from sqlalchemy import select, update
 from src.services.log_service import LogService
+from src.database.connection import get_pool
+from fastapi import Depends
+from typing import List
+from src.models.order import  OrderCalculatorAsync
 
 class ProductRepository:
     def __init__(self, pool: asyncpg.Pool):
@@ -62,6 +66,37 @@ class ProductRepository:
 
         return deleted == "DELETE 1"
 
+class OrdersRepository:
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def get_order_from_db(self, order_id: int):
+        async with self.pool.acquire() as conn:
+            result = await conn.fetchrow("SELECT * FROM orders WHERE id = $1", order_id)
+        return result
+
+    async def create_order(self, user_id: int, items_list: List[dict]):
+        """Создать товар, вернуть id"""
+        total = await OrderCalculatorAsync().calculate_total(items_list)
+        async with self.pool.acquire() as conn:
+            try:
+                order_id = await conn.fetchval(
+                    "INSERT INTO orders (user_id, total) "
+                    "VALUES ($1, $2) RETURNING id",
+                     user_id, total)
+
+                for item in items_list:
+                    await conn.execute(
+                    "INSERT INTO order_items (order_id, product_id, quantity) "
+                    "VALUES ($1, $2, $3) RETURNING id",
+                     order_id, item.product_id, total)
+            except Exception as e:
+                log_data = {"id": order_id, "status": str(e)}
+                print(log_data)
+                return None
+
+async def get_orders_repository(pool=Depends(get_pool)) -> OrdersRepository:
+    return OrdersRepository(pool)
 
 async def process_order(order_id: int):
     """Асинхронная обработка одного заказа"""
@@ -87,13 +122,6 @@ async def process_orders_async(order_ids: list):
     results = await asyncio.gather(*tasks)
     return list(results)
 
-def process_orders_sync(order_ids: list):
-    result = []
-    for order_id in order_ids:
-        time.sleep(0.1)
-        result.append(f"Заказ {order_id} обработан")
-
-    return result
 
 async def create_user_in_db(conn, name: str, password: str, email: str, balance: float = 0):
     return await conn.execute(
@@ -114,8 +142,8 @@ async def main():
     print(type(results))
     print(f"Асинхронная обработка: {timer.result} секунд")
 
-    with Timer() as timer:
-        results_sync = process_orders_sync(order_ids)
+
+
 
     print(f"Синхронная обработка: {timer.result} секунд")
 

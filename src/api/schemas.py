@@ -3,6 +3,7 @@ from bcrypt import hashpw, checkpw, gensalt
 from pydantic import BaseModel, Field, field_validator
 import re
 from hashlib import sha256
+from typing import List
 
 def hash_password(password: str):
     password_hash = sha256(password.encode()).digest()
@@ -26,4 +27,23 @@ class UserCreate(BaseModel):
             raise HTTPException(status_code=400, detail="Incorrect password")
         return password
 
+class OrderProcessModel(BaseModel):
+    order_list: List[int] = Field(
+        ...,
+        description="Список заказов")
 
+class ProductCreateModel(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, description="Название товара")
+    price: float = Field(..., gt=0, description="Цена товара (должна быть больше 0)")
+    quantity: int = Field(..., ge=0, description="Количество на складе (не может быть отрицательным)")
+
+class PaginationModel(BaseModel):
+    skip: int = 0
+    limit: int = 10
+
+class ProductForCreateOrder(ProductCreateModel):
+    product_id: int = Field(...)
+
+class CreateOrderModel(BaseModel):
+    user_id: int = Field()
+    product_list: List[ProductForCreateOrder] = Field()

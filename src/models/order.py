@@ -1,3 +1,5 @@
+from typing import List
+
 from src.models.metaclasses import Model
 from src.models.discounts import DiscountStrategy, PercentageDiscount, FixedDiscount
 from src.models.mixin import LoggableMixin, SerializableMixin
@@ -43,6 +45,13 @@ class OrderCalculator:
         total = OrderCalculator.calculate_total(order)
         return discount_strategy.apply(total, discount_amount)
 
+class OrderCalculatorAsync:
+    @staticmethod
+    async def calculate_total(items_list: List) -> float:
+        total = 0
+        for item in items_list:
+            total += item.price * item.quantity
+        return total
 
 if __name__ == "__main__":
     # Использование
