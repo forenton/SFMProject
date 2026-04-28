@@ -139,30 +139,30 @@ def get_all_products(skip: int = 0, limit: int = 10):
         raise
 
 
-@v1_router.post("/products")
+@v1_router.post("/products", status_code=status.HTTP_201_CREATED)
 async def create_product(product: ProductCreateModel):
     id = await product_repository.create(product.name, product.price, product.quantity)
     return {"status": "success", "id": id}
 
-@v1_router.post("/register")
+@v1_router.post("/register", status_code=status.HTTP_201_CREATED)
 async def create_user(user: UserCreate, conn=Depends(get_db)):
     hashed_password = hash_password(user.password)
     result = await create_user_in_db(conn, name=user.name, password=hashed_password, email=user.email)
     return {"status": "success", "result": result}
 
-@v1_router.get("/login")
+@v1_router.post("/login")
 @limiter.limit("5/minute")
-async def login_user(request: Request, usermane: str, password: str, conn=Depends(get_db)):
-    result = await read_user_in_db(conn, name=usermane)
+async def login_user(request: Request, user: UserLogin, conn=Depends(get_db)):
+    result = await read_user_in_db(conn, name=user.name)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    authorisation = verify_password(password, result["password"])
+    authorisation = verify_password(user.password, result["password"])
     if authorisation:
         output = {"name": result["name"], "email": result["email"], "balance": result["balance"]}
         return {"status": "success", "result": output}
     else:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
 app.include_router(v1_router)
 app.include_router(orders_router)

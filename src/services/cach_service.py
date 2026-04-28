@@ -90,20 +90,24 @@ def cache_async(ttl: int = 300, prefix: str = "cache"):
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            key = [prefix, func.__name__]
-            if args:
-                key.append(str(args))
-            if kwargs:
-                key.append(str(sorted(kwargs.items())))
-            cache_key = ":".join(key)
+            try:
+                key = [prefix, func.__name__]
+                if args:
+                    key.append(str(args))
+                if kwargs:
+                    key.append(str(sorted(kwargs.items())))
+                cache_key = ":".join(key)
 
-            cached = await async_redis_client.get(cache_key)
-            if cached:
-                return json.loads(cached)
+                cached = await async_redis_client.get(cache_key)
+                if cached:
+                    return json.loads(cached)
 
-            result = await func(*args, **kwargs)
-            await async_redis_client.setex(cache_key, ttl, json.dumps(result))
-            return result
+                result = await func(*args, **kwargs)
+                await async_redis_client.setex(cache_key, ttl, json.dumps(result))
+                return result
+            except Exception as e:
+                print(e)
+
         return wrapper
     return decorator
 

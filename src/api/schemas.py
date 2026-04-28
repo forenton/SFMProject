@@ -27,6 +27,10 @@ class UserCreate(BaseModel):
             raise HTTPException(status_code=400, detail="Incorrect password")
         return password
 
+class UserLogin(BaseModel):
+    name: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=8)
+
 class OrderProcessModel(BaseModel):
     order_list: List[int] = Field(
         ...,
